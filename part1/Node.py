@@ -1,23 +1,25 @@
 class Node:
     """
-    A class representing a node in a decision tree.
+    A class representing a node in a decision tree (supports multi-way splits).
     """
 
-    def __init__(self, feature=None, left=None, right=None, gain=None, value=None):
+    def __init__(self, feature=None, children=None, gain=None, entropy=None,
+                 value=None, class_counts=None):
         """
-        Initializes a new instance of the Node class.
-
         Args:
-            feature: The feature used for splitting at this node. Defaults to None.
-            threshold: The threshold used for splitting at this node. Defaults to None.
-            left: The left child node. Defaults to None.
-            right: The right child node. Defaults to None.
-            gain: The gain of the split. Defaults to None.
-            value: If this node is a leaf node, this attribute represents the predicted value
-                for the target variable. Defaults to None.
+            feature: index of the feature this node splits on (None for leaves).
+            children: dict {feature_value: Node} — one child per distinct value
+                of `feature`. None for leaves.
+            gain: information gain of the split at this node (None for leaves).
+            entropy: entropy of this node's dataset (used for split nodes' printout,
+                and handy to keep for leaves too).
+            value: predicted class label if this is a leaf. None for split nodes.
+            class_counts: dict {class_label: count} of instances reaching this
+                node — required for leaf printout, e.g. {0: 31, 1: 0}.
         """
         self.feature = feature
-        self.left = left
-        self.right = right
+        self.children = children if children is not None else {}
         self.gain = gain
+        self.entropy = entropy
         self.value = value
+        self.class_counts = class_counts

@@ -155,22 +155,79 @@ class DecisionTree:
     # --- 3. Tree Building  ---
     # ========================================
 
-    def build_tree(self, dataset, current_depth=0):
+    def _class_counts(self, y):
+        """
+        Returns {class_label: count} for the given labels. Uses self.classes_
+        if it's been set (via fit), otherwise falls back to whatever classes
+        appear in y — lets you test build_tree() standalone without calling
+        fit() first.
+        """
+        classes = getattr(self, "classes_", None) or sorted(np.unique(y))
+        counts = {c: 0 for c in classes}
+        values, freqs = np.unique(y, return_counts=True)
+        for v, f in zip(values, freqs):
+            counts[v] = int(f)
+        return counts
+
+    def _majority_class(self, class_counts):
+        return max(class_counts, key=class_counts.get)
+
+    def build_tree(self, dataset, features_available, current_depth=0):
         """
         Recursively builds a decision tree from the given dataset.
 
         Args:
-        dataset (ndarray): The dataset to build the tree from.
-        current_depth (int): The current depth of the tree.
+            dataset (ndarray): rows for this node (last column = labels).
+            features_available (list[int]): feature indices not yet used
+                on the path from the root to this node.
+            current_depth (int): depth of this node in the tree.
 
         Returns:
-        Node: The root node of the built decision tree.
+            Node: root of the (sub)tree built from `dataset`.
         """
-        # TODO
-        leaf_value = None  # Placeholder
 
-        # return leaf node value
-        return Node(value=leaf_value)
+        y = dataset[:, -1]
+        class_counts = self._class_counts(y)
+        node_entropy = self.entropy(y)
+
+        # Stopping Criteria
+        stop = (
+            current_depth >= self.max_depth
+            or len(dataset) < self.min_samples
+            or node_entropy == 0.0  # pure node
+            or len(features_available) == 0 # nothing left to split on
+        )
+
+        best = None
+        if not stop:
+            best = self.best_split(dataset, features_available)
+            if(best["feature"]) is None or best["gain"] < self.ig_threshold:
+                stop = True
+
+        if stop:
+            return Node(
+                value = self._majority_class(class_counts),
+                class_counts=class_counts,
+                entropy = node_entropy
+            )
+
+        # Recurse into each branch
+        chosen_feature = best["feature"]
+        remaining_features = [f for f in features_available if f != chosen_feature]
+
+        children = {}
+        for value, subset in best["splits"].items():
+            children[value] = self.build_tree(
+                subset, remaining_features, current_depth + 1
+            )
+
+        return Node(
+            feature=chosen_feature,
+            children=children,
+            gain=best["gain"],
+            entropy=node_entropy,
+            class_counts=class_counts,
+        )
 
     def fit(self, X, y):
         """
@@ -180,8 +237,26 @@ class DecisionTree:
         X (ndarray): The feature matrix.
         y (ndarray): The target values.
         """
+        y = np.asarray(y).reshape(-1, 1)
         dataset = np.concatenate((X, y), axis=1)
-        self.root = self.build_tree(dataset)
+
+        self.classes_ = sorted(np.unique(y))
+        features_available = list(range(X.shape[1]))
+
+        self.root = self.build_tree(dataset, features_available)
+
+    def _predict_one(self, x, node):
+        if node.value is not None:
+            return node.value
+
+        feature_value = x[node.feature]
+        child = node.children.get(feature_value)
+
+        if child is None:
+            # feature value is not seen during training at this branch
+            # fall back to majrotiy class at this node
+            return self._majority_class(node.class_counts)
+        return self._predict_one(x, child)
 
     def predict(self, X):
         """
@@ -194,7 +269,7 @@ class DecisionTree:
         list: A list of predicted class labels.
         """
         # TODO
-        predictions = []  # Placeholder
+        predictions = [self._predict_one(x, self.root) for x in X]
         return predictions
 
 # ================================================================================================================
@@ -236,11 +311,26 @@ def check_best_split():
     result = dt.best_split(data, features_available=[0, 1])
     print(result)
 
+def check_build_tree():
+    dt = DecisionTree(max_depth=100)
+    data = np.array([
+        [1, 0, 1],
+        [0, 0, 0],
+        [1, 1, 1],
+        [0, 1, 0],
+    ])
+    X, y = data[:, :-1], data[:, -1]
+    dt.fit(X, y)
+    preds = dt.predict(X)
+    print("Predictions:", preds)
+    print("Accuracy:", np.mean(np.array(preds) == y))
+
 def main():
     # check_entropy()
     # check_information_gain()
     # check_split_data()
-    check_best_split()
+    # check_best_split()
+    check_build_tree()
 
 if __name__ == "__main__":
     main()
