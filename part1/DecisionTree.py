@@ -76,21 +76,36 @@ class DecisionTree:
         # Return the final entropy value
         return entropy
 
-    def information_gain(self, parent, left, right):
+    def information_gain(self, parent_y, children_y):
         """
-        Computes the information gain from splitting the parent dataset into two datasets.
+        Computes the information gain from splitting the parent labels into
+        an arbitrary number of child groups (one per distinct feature value).
 
         Parameters:
-            parent (ndarray): Input parent dataset.
-            left (ndarray): Subset of the parent dataset after split on a feature.
-            right (ndarray): Subset of the parent dataset after split on a feature.
+            parent_y (array-like): Labels before the split.
+            children_y (list of array-like): Labels of each child group after the split.
+                E.g. for a feature with values {0, 1, 2}, this would be
+                [y_where_feature==0, y_where_feature==1, y_where_feature==2].
 
         Returns:
-            information_gain (float): Information gain of the split.
+            information_gain (float): IG of this split.
         """
-        # TODO
-        information_gain = None  # Placeholder
+        parent_y = np.asarray(parent_y)
+        n = len(parent_y)
+        if n == 0:
+            return 0.0
 
+        parent_entropy = self.entropy(parent_y)
+
+        weighted_child_entropy = 0.0
+        for child_y in children_y:
+            child_y = np.asarray(child_y)
+            if len(child_y) == 0:
+                continue # empty branches contribute 0 weight, skip safely
+            weight = len(child_y) / n
+            weighted_child_entropy = weight * self.entropy(child_y)
+
+        information_gain = parent_entropy - weighted_child_entropy
         return information_gain
 
     def best_split(self, dataset, num_samples, num_features):
@@ -176,9 +191,18 @@ def check_entropy():
     print(f"Entropy of [0,0.1,1] should be 1.0: {dt.entropy([0,0,1,1])}")
     print(f"Entropy of [1,1,1,1] should be 0.0: {dt.entropy([1,1,1,1])}")
 
+def check_information_gain():
+    dt = DecisionTree()
+    parent = [0] * 9 + [1] * 10
+    child0 = [1] * 9  # feature==0 branch: all class 1
+    child1 = [0] * 10  # feature==1 branch: all class 0
+    ig = dt.information_gain(parent, [child0, child1])
+    print(f"IG should be ~0.9980: {ig:.4f}")
+
 
 def main():
-    check_entropy()
+    # check_entropy()
+    check_information_gain()
 
 
 if __name__ == "__main__":
