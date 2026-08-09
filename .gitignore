@@ -3,4 +3,5 @@ plans
 part1/*.txt
 part2/*.txt
 __pycache__/
-part2/results
+plans/part2/old_results
+part2/*.csv
