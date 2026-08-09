@@ -112,7 +112,7 @@ def scale_data(split: SplitData, scaler) -> SplitData:
 
 def evaluate_normalisation_impact(
         split: SplitData,
-        knn_neighbours: int = 9,
+        knn_neighbours: int = 3,
         dt_max_depth: int = 5
 ) -> dict[str, dict[str,float]]:
     """
@@ -199,20 +199,20 @@ def imputation_and_normalisation():
     # Carry forward one strategy as "the complete dataset" for the rest of Part 2
     full_split = impute_data(split, strategy="median")
 
-    # This is to double-check that the scaling worked as standardised values are genuinely transformed
-    std_split = scale_data(full_split, StandardScaler())
-    print(full_split.X_train.iloc[0, :5].values)  # raw
-    print(std_split.X_train.iloc[0, :5].values)  # should look nothing like the raw values
+    # # This is to double-check that the scaling worked as standardised values are genuinely transformed
+    # std_split = scale_data(full_split, StandardScaler())
+    # print(full_split.X_train.iloc[0, :5].values)  # raw
+    # print(std_split.X_train.iloc[0, :5].values)  # should look nothing like the raw values
+    #
+    # # This is to check that the predictions are not identical between the raw and standardised data
+    # knn_raw = KNeighborsClassifier(n_neighbors=9).fit(full_split.X_train, full_split.y_train)
+    # knn_std = KNeighborsClassifier(n_neighbors=9).fit(std_split.X_train, std_split.y_train)
+    # preds_raw = knn_raw.predict(full_split.X_test)
+    # preds_std = knn_std.predict(std_split.X_test)
+    # print((preds_raw == preds_std).all())  # True = literally identical predictions
+    # print((preds_raw != preds_std).sum(), "differing predictions out of", len(preds_raw))
 
-    # This is to check that the predictions are not identical between the raw and standardised data
-    knn_raw = KNeighborsClassifier(n_neighbors=9).fit(full_split.X_train, full_split.y_train)
-    knn_std = KNeighborsClassifier(n_neighbors=9).fit(std_split.X_train, std_split.y_train)
-    preds_raw = knn_raw.predict(full_split.X_test)
-    preds_std = knn_std.predict(std_split.X_test)
-    print((preds_raw == preds_std).all())  # True = literally identical predictions
-    print((preds_raw != preds_std).sum(), "differing predictions out of", len(preds_raw))
-
-    normalisation_results = evaluate_normalisation_impact(full_split, knn_neighbours=9, dt_max_depth=5)
+    normalisation_results = evaluate_normalisation_impact(full_split)
 
     save_imputation_results_csv(imputation_results)
     save_normalisation_results_csv(normalisation_results)
