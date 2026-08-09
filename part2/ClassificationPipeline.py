@@ -9,6 +9,8 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 
 @dataclass(frozen=True)
 class SplitData:
@@ -16,6 +18,20 @@ class SplitData:
     X_test: pd.DataFrame
     y_train: pd.Series
     y_test: pd.Series
+
+@dataclass(frozen=True)
+class ClassifierResult:
+    classifier: str
+    hyperparameter: str
+    value: int
+    score: ClassificationScore
+
+@dataclass(frozen=True)
+class ClassificationScore:
+    accuracy: float   # 0-100
+    precision: float
+    recall: float
+    f1: float
 
 # Fields
 RANDOM_STATE = 42
@@ -77,9 +93,9 @@ def evaluate_imputation_strategies(split: SplitData, max_depth: int = 5) -> dict
     results = {}
     for strategy in ["mean", "median"]:
         imputed_split = impute_data(split, strategy)
-        clf = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
-        clf.fit(imputed_split.X_train, imputed_split.y_train)
-        predictions = clf.predict(imputed_split.X_test)
+        classifier = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+        classifier.fit(imputed_split.X_train, imputed_split.y_train)
+        predictions = classifier.predict(imputed_split.X_test)
 
         accuracy = accuracy_score(imputed_split.y_test, predictions)
         results[strategy] = accuracy
@@ -143,6 +159,50 @@ def evaluate_normalisation_impact(
     return results
 
 # ========================================
+# --- 3. Classifier Exploration & Hyperparameter Tuning ---
+# ========================================
+
+def _score_model(classifier, split: SplitData) -> ClassificationScore:
+    classifier.fit(split.X_train, split.y_train)
+    predictions = classifier.predict(split.X_test)
+
+    accuracy = accuracy_score(split.y_test, predictions) * 100
+    precision = precision_score(split.y_test, predictions, pos_label=1)
+    recall = recall_score(split.y_test, predictions, pos_label=1)
+    f1 = f1_score(split.y_test, predictions, pos_label=1)
+
+    return ClassificationScore(accuracy, precision, recall, f1)
+
+def evaluate_classifiers(split: SplitData) -> list[ClassifierResult]:
+    results: list[ClassifierResult] = []
+
+    # For KNN
+    for k in [3, 9, 15, 21]:
+        classifier = KNeighborsClassifier(n_neighbors=k)
+        score: ClassificationScore = _score_model(classifier, split)
+        results.append(ClassifierResult("KNN", "n_neighbours", k, score))
+
+    # For Decision Tree
+    for depth in [2, 8, 14]:
+        classifier = DecisionTreeClassifier(max_depth=depth, random_state=RANDOM_STATE)
+        score: ClassificationScore = _score_model(classifier, split)
+        results.append(ClassifierResult("DecisionTree", "max_depth", depth, score))
+
+    # For AdaBoost
+    for n in [10, 20, 30]:
+        classifier = AdaBoostClassifier(n_estimators=n, random_state=RANDOM_STATE)
+        score: ClassificationScore = _score_model(classifier, split)
+        results.append(ClassifierResult("AdaBoost", "n_estimators", n, score))
+
+    # For Random Forest
+    for n in [10, 30, 50, 60]:
+        classifier = RandomForestClassifier(n_estimators=n, random_state=RANDOM_STATE)
+        score: ClassificationScore = _score_model(classifier, split)
+        results.append(ClassifierResult("Random Forest", "n_estimators", n, score))
+
+    return results
+
+# ========================================
 # --- Saving Results to CSV  ---
 # ========================================
 
@@ -178,11 +238,30 @@ def save_normalisation_results_csv(
     df.to_csv(path, index=False)
     print(f"Saved normalization results to {path}")
 
+def save_classifier_results_csv(
+        results: list[ClassifierResult],
+        path: Path = Path("classifier_results.csv")
+):
+    df = pd.DataFrame([
+        {
+            "Classifier": r.classifier,
+            "Hyperparameter": r.hyperparameter,
+            "Value": r.value,
+            "Accuracy (%)": round(r.score.accuracy, 2),
+            "Precision": round(r.score.precision, 4),
+            "Recall": round(r.score.recall, 4),
+            "F1 Score": round(r.score.f1, 4),
+        }
+        for r in results
+    ])
+    df.to_csv(path, index=False)
+    print(f"Saved classifier results to {path}")
+
 
 # ================================================================================================================
 # ================================================================================================================
 
-def load_and_split():
+def try_load_and_split():
     X, y = load_dataset(Path("breast-cancer.csv"))
     print("Missing values per column:")
     print(X.isna().sum())
@@ -190,7 +269,7 @@ def load_and_split():
     split = split_data(X, y)
     print(f"Train size: {split.X_train.shape}, Test size: {split.X_test.shape}")
 
-def imputation_and_normalisation():
+def try_imputation_and_normalisation():
     X, y = load_dataset(Path("breast-cancer.csv"))
     split = split_data(X, y)
 
@@ -217,11 +296,24 @@ def imputation_and_normalisation():
     save_imputation_results_csv(imputation_results)
     save_normalisation_results_csv(normalisation_results)
 
+def try_classifier_exploration():
+    X, y = load_dataset(Path("breast-cancer.csv"))
+    split = split_data(X, y)
+    full_split = impute_data(split, strategy="median")  # same "complete dataset" as before
+
+    results = evaluate_classifiers(full_split)
+    save_classifier_results_csv(results)
+
+    df = pd.read_csv(Path("classifier_results.csv"))
+    print(df.to_string(index = False))
+
 def main():
     print("\n========== Loading and Splitting ==========")
     # load_and_split()
     print("\n========== Imputation and Normalisation ==========")
-    imputation_and_normalisation()
+    # try_imputation_and_normalisation()
+    print("\n========== Classifier Exploration ==========")
+    try_classifier_exploration()
 
 if __name__ == "__main__":
     main()
