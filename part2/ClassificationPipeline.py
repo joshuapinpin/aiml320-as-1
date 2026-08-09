@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
+from sklearn.decomposition import PCA
 
 @dataclass(frozen=True)
 class SplitData:
@@ -260,6 +261,68 @@ def evaluate_feature_selection(
 
     return results
 
+# ========================================
+# --- 4. Feature Extraction via PCA ---
+# ========================================
+
+def apply_pca(split: SplitData, n_components) -> tuple[SplitData, PCA]:
+    """
+    Standardises the split, then fits PCA on the scaled training data only.
+    n_components can be an int (fixed number of components) or a float in
+    (0, 1) (e.g. 0.95 to keep enough components for 95% explained variance).
+    Returns the PCA-transformed split and the fitted PCA object (for
+    inspecting explained_variance_ratio_, n_components_, etc.).
+    """
+
+    scaled_split = scale_data(split, StandardScaler())
+
+    pca = PCA(n_components=n_components, random_state=RANDOM_STATE)
+
+    X_train_pca = pd.DataFrame(
+        pca.fit_transform(scaled_split.X_train),
+        index=scaled_split.X_train.index,
+    )
+    X_test_pca = pd.DataFrame(
+        pca.transform(scaled_split.X_test),
+        index=scaled_split.X_test.index,
+    )
+
+    pca_split = SplitData(X_train=X_train_pca, X_test=X_test_pca,
+                          y_train=split.y_train, y_test=split.y_test)
+
+    return pca_split, pca
+
+def evaluate_pca_impact(
+        split: SplitData,
+        n_components = 0.95,
+        max_depth: int = 4
+) -> dict[str, float]:
+    """
+    Compares Decision Tree accuracy without PCA (but still standardised, so
+    the comparison isolates PCA's effect) vs. with PCA applied.
+    """
+    results = {}
+
+    # Baseline: standardised, no PCA
+    scaled_split = scale_data(split, StandardScaler())
+    dt_no_pca = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+    dt_no_pca.fit(scaled_split.X_train, scaled_split.y_train)
+    accuracy_no_pca = accuracy_score(scaled_split.y_test, dt_no_pca.predict(scaled_split.X_test))
+    results["No PCA (standardised"] = accuracy_no_pca
+    print(f"No PCA, {scaled_split.X_train.shape[1]} features -> "
+          f"Decision Tree (max_depth={max_depth}) accuracy: {accuracy_no_pca * 100:.2f}%")
+
+    # With PCA
+    pca_split, pca = apply_pca(split, n_components)
+    dt_pca = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+    dt_pca.fit(pca_split.X_train, pca_split.y_train)
+    accuracy_pca = accuracy_score(pca_split.y_test, dt_pca.predict(pca_split.X_test))
+    results["With PCA"] = accuracy_pca
+    print(f"With PCA, {pca.n_components_} components "
+          f"(explaining {pca.explained_variance_ratio_.sum() * 100:.2f}% variance) -> "
+          f"Decision Tree (max_depth={max_depth}) accuracy: {accuracy_pca * 100:.2f}%")
+
+    return results
 
 # ========================================
 # --- Saving Results to CSV  ---
@@ -341,6 +404,19 @@ def save_feature_selection_results_csv(
     df.to_csv(path, index=False)
     print(f"Saved feature selection results to {path}")
 
+def save_pca_results_csv(
+        results: dict[str, float],
+        pca: PCA,
+        path: Path = Path("pca_results.csv")
+):
+    df = pd.DataFrame([
+        {"Condition": name, "Accuracy (%)": acc * 100,
+         "N Components": pca.n_components_ if name == "With PCA" else "-"}
+        for name, acc in results.items()
+    ])
+    df.to_csv(path, index=False)
+    print(f"Saved PCA results to {path}")
+
 # ================================================================================================================
 # ================================================================================================================
 
@@ -407,6 +483,16 @@ def try_feature_selection():
     save_correlation_results_csv(correlations, selected_features)
     save_feature_selection_results_csv(results)
 
+def try_pca_feature_extraction():
+    X, y = load_dataset(Path("breast-cancer.csv"))
+    split = split_data(X, y)
+    full_split = impute_data(split, strategy="median")  # same "complete dataset" as before
+
+    results = evaluate_pca_impact(full_split, n_components=0.95, max_depth=3)
+
+    _, pca = apply_pca(full_split, n_components=0.95)
+    save_pca_results_csv(results, pca)
+
 def main():
     print("\n========== Loading and Splitting ==========")
     # load_and_split()
@@ -415,7 +501,9 @@ def main():
     print("\n========== Classifier Exploration ==========")
     # try_classifier_exploration()
     print("\n========== Feature Selection ==========")
-    try_feature_selection()
+    # try_feature_selection()
+    print("\n========== Feature Extraction ==========")
+    try_pca_feature_extraction()
 
 if __name__ == "__main__":
     main()
