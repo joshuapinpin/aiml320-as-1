@@ -32,22 +32,14 @@ class DecisionTree:
             left_dataset (ndarray): Subset of the dataset with values equal to the chosen category.
             right_dataset (ndarray): Subset of the dataset with values not equal to the chosen category.
         """
-        # Create empty arrays to store the left and right datasets
-        left_dataset = []
-        right_dataset = []
+        feature_column = dataset[:, feature]
+        unique_values = np.unique(feature_column)
 
-        # Loop over each row in the dataset and split based on the given feature
-        for row in dataset:
-            value = None  # TODO
-            if row[feature] == value:
-                left_dataset.append(row)
-            else:
-                right_dataset.append(row)
+        splits = {}
+        for value in unique_values:
+            splits[value] = dataset[feature_column == value]
 
-        # Convert the left and right datasets to numpy arrays and return
-        left_dataset = np.array(left_dataset)
-        right_dataset = np.array(right_dataset)
-        return left_dataset, right_dataset
+        return splits
 
     def entropy(self, y):
         """
@@ -103,43 +95,52 @@ class DecisionTree:
             if len(child_y) == 0:
                 continue # empty branches contribute 0 weight, skip safely
             weight = len(child_y) / n
-            weighted_child_entropy = weight * self.entropy(child_y)
+            weighted_child_entropy += weight * self.entropy(child_y)
 
         information_gain = parent_entropy - weighted_child_entropy
         return information_gain
 
-    def best_split(self, dataset, num_samples, num_features):
+    def best_split(self,  dataset, features_available):
         """
-        Finds the best split for the given dataset.
+        Finds the best feature to split on for the given dataset, out of the
+        features still available at this point in the tree.
 
         Args:
-        dataset (ndarray): The dataset to split.
-        num_samples (int): The number of samples in the dataset.
-        num_features (int): The number of features in the dataset.
+            dataset (ndarray): The dataset at this node (last column = labels).
+            features_available (list[int]): Indices of features not yet used
+                on the path from the root to this node.
 
         Returns:
-        dict: A dictionary with the best split feature index, threshold, gain,
-              left and right datasets.
+            dict with keys:
+                "feature": index of the best feature to split on (or None if no
+                           feature gives a useful split)
+                "gain": the information gain of that split
+                "entropy": the entropy of `dataset` at this node (parent entropy)
+                "splits": dict {value: subset_ndarray} for the chosen feature,
+                          as returned by self.split_data
         """
-        best_split_gain = -1
-        for feature_index in range(num_features):
-            # TODO get the feature values
-            # get left and right datasets
-            feature_values = None  # TODO: indexed with feature_index
-            left_dataset, right_dataset = self.split_data(dataset, feature_values)
+        parent_y = dataset[:, -1]
+        parent_entropy = self.entropy(parent_y)
 
-            # check if either datasets is empty
-            if len(left_dataset) and len(right_dataset):
-                # get y values of the parent and left, right nodes
-                y, left_y, right_y = dataset[:, -1], left_dataset[:, -1], right_dataset[:, -1]
+        best = {"feature": None, "gain": -1.0, "entropy": parent_entropy, "splits": None}
 
-                # compute information gain based on the y values
-                information_gain = self.information_gain(y, left_y, right_y)
+        for feature_index in features_available:
+            splits = self.split_data(dataset, feature_index)
 
-                # update the best split if conditions are met
-                if information_gain > best_split_gain:
-                    # TODO: update the best_split_gain and the corresponding feature and threshold
-                    pass
+            # If every remaining instance has the same value for this feature,
+            # splitting on it achieves nothing - skip it.
+            if len(splits) < 2:
+                continue
+
+            children_y = [subset[:, -1] for subset in splits.values()]
+            gain = self.information_gain(parent_y, children_y)
+
+            if gain > best["gain"]:
+                best["feature"] = feature_index
+                best["gain"] = gain
+                best["splits"] = splits
+
+        return best
 
     def build_tree(self, dataset, current_depth=0):
         """
@@ -199,11 +200,34 @@ def check_information_gain():
     ig = dt.information_gain(parent, [child0, child1])
     print(f"IG should be ~0.9980: {ig:.4f}")
 
+def check_split_data():
+    dt = DecisionTree()
+    data = np.array([
+        [1, 0, 1],
+        [0, 0, 0],
+        [1, 1, 1],
+        [0, 1, 0],
+    ])
+    splits = dt.split_data(data, feature=1)
+    for value, subset in splits.items():
+        print(f"feature==({value}):\n{subset}")
+
+def check_best_split():
+    dt = DecisionTree()
+    data = np.array([
+        [1, 0, 1],
+        [0, 0, 0],
+        [1, 1, 1],
+        [0, 1, 0],
+    ])
+    result = dt.best_split(data, features_available=[0, 1])
+    print(result)
 
 def main():
     # check_entropy()
-    check_information_gain()
-
+    # check_information_gain()
+    # check_split_data()
+    check_best_split()
 
 if __name__ == "__main__":
     main()
