@@ -1,7 +1,7 @@
 import numpy as np
 import sys
 
-from Node import Node
+from part1.Node import Node
 
 class DecisionTree:
     """
@@ -309,56 +309,6 @@ class DecisionTree:
 # ================================================================================================================
 # ================================================================================================================
 
-def check_entropy():
-    dt = DecisionTree()
-    print(f"Entropy of [0,0.1,1] should be 1.0: {dt.entropy([0,0,1,1])}")
-    print(f"Entropy of [1,1,1,1] should be 0.0: {dt.entropy([1,1,1,1])}")
-
-def check_information_gain():
-    dt = DecisionTree()
-    parent = [0] * 9 + [1] * 10
-    child0 = [1] * 9  # feature==0 branch: all class 1
-    child1 = [0] * 10  # feature==1 branch: all class 0
-    ig = dt.information_gain(parent, [child0, child1])
-    print(f"IG should be ~0.9980: {ig:.4f}")
-
-def check_split_data():
-    dt = DecisionTree()
-    data = np.array([
-        [1, 0, 1],
-        [0, 0, 0],
-        [1, 1, 1],
-        [0, 1, 0],
-    ])
-    splits = dt.split_data(data, feature=1)
-    for value, subset in splits.items():
-        print(f"feature==({value}):\n{subset}")
-
-def check_best_split():
-    dt = DecisionTree()
-    data = np.array([
-        [1, 0, 1],
-        [0, 0, 0],
-        [1, 1, 1],
-        [0, 1, 0],
-    ])
-    result = dt.best_split(data, features_available=[0, 1])
-    print(result)
-
-def check_build_tree():
-    dt = DecisionTree(max_depth=100)
-    data = np.array([
-        [1, 0, 1],
-        [0, 0, 0],
-        [1, 1, 1],
-        [0, 1, 0],
-    ])
-    X, y = data[:, :-1], data[:, -1]
-    dt.fit(X, y)
-    preds = dt.predict(X)
-    print("Predictions:", preds)
-    print("Accuracy:", np.mean(np.array(preds) == y))
-
 def check_tree_printing():
     if len(sys.argv) != 3:
         print("Usage: DecisionTree.py <train_csv> <output_tree_txt>")
@@ -369,7 +319,7 @@ def check_tree_printing():
     data = np.genfromtxt(train_path, delimiter=",", skip_header=1, dtype=int)
     X, y = data[:, :-1], data[:, -1]
 
-    dt = DecisionTree(min_samples=2, max_depth=1000, ig_threshold=0.00001)
+    dt = DecisionTree(min_samples=2, max_depth=2, ig_threshold=0.00001)
     dt.fit(X, y)
 
     predictions = np.array(dt.predict(X))
@@ -380,11 +330,6 @@ def check_tree_printing():
     print(f"Tree written to {output_path}")
 
 def main():
-    # check_entropy()
-    # check_information_gain()
-    # check_split_data()
-    # check_best_split()
-    # check_build_tree()
     check_tree_printing()
 
 if __name__ == "__main__":
