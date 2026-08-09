@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 
 from Node import Node
 
@@ -152,7 +153,7 @@ class DecisionTree:
         return best
 
     # ========================================
-    # --- 3. Tree Building  ---
+    # --- 3. Tree Building, Fitting, and Prediction ---
     # ========================================
 
     def _class_counts(self, y):
@@ -272,6 +273,39 @@ class DecisionTree:
         predictions = [self._predict_one(x, self.root) for x in X]
         return predictions
 
+    # ========================================
+    # --- 4. Tree Printing  ---
+    # ========================================
+
+    def _format_leaf(self, node):
+        counts_str = ", ".join(f"{c}: {n}" for c, n in node.class_counts.items())
+        return f"leaf {{{counts_str}}}"
+
+    def _print_node(self, node, depth, lines):
+        indent = "    " * depth
+        if node.value is not None:
+            lines.append(f"{indent}{self._format_leaf(node)}")
+            return
+
+        lines.append(
+            f"{indent}feature {node.feature} "
+            f"(IG: {node.gain:.4f}, Entropy: {node.entropy:.4f})"
+        )
+        for value in sorted(node.children.keys()):
+            child = node.children[value]
+            lines.append(f"{indent}-- feature {node.feature} == {int(value)} --")
+            self._print_node(child, depth + 1, lines)
+
+    def tree_to_string(self):
+        lines = []
+        self._print_node(self.root, 0, lines)
+        return "\n".join(lines)
+
+    def save_tree(self, output_path):
+        with open(output_path, "w") as f:
+            f.write(self.tree_to_string())
+            f.write("\n")
+
 # ================================================================================================================
 # ================================================================================================================
 
@@ -325,12 +359,33 @@ def check_build_tree():
     print("Predictions:", preds)
     print("Accuracy:", np.mean(np.array(preds) == y))
 
+def check_tree_printing():
+    if len(sys.argv) != 3:
+        print("Usage: DecisionTree.py <train_csv> <output_tree_txt>")
+        sys.exit(1)
+
+    train_path, output_path = sys.argv[1], sys.argv[2]
+
+    data = np.genfromtxt(train_path, delimiter=",", skip_header=1, dtype=int)
+    X, y = data[:, :-1], data[:, -1]
+
+    dt = DecisionTree(min_samples=2, max_depth=1000, ig_threshold=0.00001)
+    dt.fit(X, y)
+
+    predictions = np.array(dt.predict(X))
+    accuracy = np.mean(predictions == y)
+    print(f"Training accuracy: {accuracy * 100:.2f}%")
+
+    dt.save_tree(output_path)
+    print(f"Tree written to {output_path}")
+
 def main():
     # check_entropy()
     # check_information_gain()
     # check_split_data()
     # check_best_split()
-    check_build_tree()
+    # check_build_tree()
+    check_tree_printing()
 
 if __name__ == "__main__":
     main()
