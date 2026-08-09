@@ -20,26 +20,10 @@ class DecisionTree:
         self.max_depth = max_depth
         self.ig_threshold = ig_threshold
 
-    def split_data(self, dataset, feature):
-        """
-        Splits the given dataset into two datasets based on the given feature and threshold.
 
-        Parameters:
-            dataset (ndarray): Input dataset.
-            feature (int): Index of the feature to be split on.
-
-        Returns:
-            left_dataset (ndarray): Subset of the dataset with values equal to the chosen category.
-            right_dataset (ndarray): Subset of the dataset with values not equal to the chosen category.
-        """
-        feature_column = dataset[:, feature]
-        unique_values = np.unique(feature_column)
-
-        splits = {}
-        for value in unique_values:
-            splits[value] = dataset[feature_column == value]
-
-        return splits
+    # ========================================
+    # --- 1. Entropy and Information Gain  ---
+    # ========================================
 
     def entropy(self, y):
         """
@@ -100,6 +84,31 @@ class DecisionTree:
         information_gain = parent_entropy - weighted_child_entropy
         return information_gain
 
+    # ========================================
+    # --- 2. Data Splitting  ---
+    # ========================================
+
+    def split_data(self, dataset, feature):
+        """
+        Splits the given dataset into two datasets based on the given feature and threshold.
+
+        Parameters:
+            dataset (ndarray): Input dataset.
+            feature (int): Index of the feature to be split on.
+
+        Returns:
+            left_dataset (ndarray): Subset of the dataset with values equal to the chosen category.
+            right_dataset (ndarray): Subset of the dataset with values not equal to the chosen category.
+        """
+        feature_column = dataset[:, feature]
+        unique_values = np.unique(feature_column)
+
+        splits = {}
+        for value in unique_values:
+            splits[value] = dataset[feature_column == value]
+
+        return splits
+
     def best_split(self,  dataset, features_available):
         """
         Finds the best feature to split on for the given dataset, out of the
@@ -141,6 +150,10 @@ class DecisionTree:
                 best["splits"] = splits
 
         return best
+
+    # ========================================
+    # --- 3. Tree Building  ---
+    # ========================================
 
     def build_tree(self, dataset, current_depth=0):
         """
