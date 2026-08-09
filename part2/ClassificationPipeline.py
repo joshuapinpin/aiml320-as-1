@@ -203,6 +203,65 @@ def evaluate_classifiers(split: SplitData) -> list[ClassifierResult]:
     return results
 
 # ========================================
+# --- 4. Feature Selection via Pearson Correlation ---
+# ========================================
+
+def compute_pearson_correlations(split: SplitData) -> pd.Series:
+    """
+    Computes Pearson correlation of each feature in X_train with y_train.
+    Returns a Series indexed by feature name, sorted by absolute correlation descending.
+    """
+    combined = split.X_train.copy()
+    combined["__target__"] = split.y_train.values
+    correlations = combined.corr()["__target__"].drop("__target__")
+    return correlations.reindex(correlations.abs().sort_values(ascending=False).index)
+
+def select_features_by_correlation(correlations: pd.Series, threshold: float = 0.6) -> list[str]:
+    """
+    Selects features whose ABSOLUTE Pearson correlation with the target exceeds the threshold.
+
+    The handout says "greater than 0.6", but I use abs(r) > threshold here rather than
+    r > threshold. Several features in this dataset are plausible candidates for strong negative
+    correlation with malignancy, and a signed threshold would silently drop any of those from
+    consideration. This choice will  be stated explicitly in the report.
+    """
+    selected = correlations[correlations.abs() > threshold].index.tolist()
+    return selected
+
+def evaluate_feature_selection(
+        split: SplitData,
+        selected_features = list[str],
+        max_depth: int = 5,
+) -> dict[str, float]:
+    """
+    Trains a Decision Tree on the full feature set and on the correlation-selected subset,
+    evaluates both on the test set, and returns their accuracies for comparison.
+    """
+    results = {}
+
+    # Full feature set (baseline)
+    dt_full = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+    dt_full.fit(split.X_train, split.y_train)
+    accuracy_full = accuracy_score(split.y_test, dt_full.predict(split.X_test))
+    results["Full feature set"] = accuracy_full
+    print(f"Full feature set ({split.X_train.shape[1]} features) -> "
+          f"Decision Tree (max_depth={max_depth}) accuracy: {accuracy_full * 100:.2f}%")
+
+    # Reduced feature set
+    X_train_sel = split.X_train[selected_features]
+    X_test_sel = split.X_test[selected_features]
+
+    dt_sel = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+    dt_sel.fit(X_train_sel, split.y_train)
+    accuracy_sel = accuracy_score(split.y_test, dt_sel.predict(X_test_sel))
+    results["Selected feature set"] = accuracy_sel
+    print(f"Selected feature set ({len(selected_features)} features) -> "
+          f"Decision Tree (max_depth={max_depth}) accuracy: {accuracy_sel * 100:.2f}%")
+
+    return results
+
+
+# ========================================
 # --- Saving Results to CSV  ---
 # ========================================
 
@@ -257,6 +316,30 @@ def save_classifier_results_csv(
     df.to_csv(path, index=False)
     print(f"Saved classifier results to {path}")
 
+def save_correlation_results_csv(
+        correlations: pd.Series,
+        selected_features: list[str],
+        path: Path = Path("correlation_results.csv")
+):
+    df = pd.DataFrame({
+        "Feature": correlations.index,
+        "Pearson r": correlations.values,
+        "Abs r": correlations.abs().values,
+        "Selected": [f in selected_features for f in correlations.index]
+    })
+    df.to_csv(path, index=False)
+    print(f"Saved correlation results to {path}")
+
+def save_feature_selection_results_csv(
+        results: dict[str, float],
+        path: Path = Path("feature_selection_results.csv")
+):
+    df = pd.DataFrame([
+        {"Feature Set": name, "Accuracy (%)": acc * 100}
+        for name, acc in results.items()
+    ])
+    df.to_csv(path, index=False)
+    print(f"Saved feature selection results to {path}")
 
 # ================================================================================================================
 # ================================================================================================================
@@ -307,13 +390,32 @@ def try_classifier_exploration():
     df = pd.read_csv(Path("classifier_results.csv"))
     print(df.to_string(index = False))
 
+def try_feature_selection():
+    X, y = load_dataset(Path("breast-cancer.csv"))
+    split = split_data(X, y)
+    full_split = impute_data(split, strategy="median")  # same "complete dataset" as before
+
+    correlations = compute_pearson_correlations(full_split)
+    selected_features = select_features_by_correlation(correlations, threshold=0.6)
+
+    print(f"\n{len(selected_features)} of {len(correlations)} features retained "
+          f"(|r| > 0.6):")
+    print(selected_features)
+
+    results = evaluate_feature_selection(full_split, selected_features, max_depth=5)
+
+    save_correlation_results_csv(correlations, selected_features)
+    save_feature_selection_results_csv(results)
+
 def main():
     print("\n========== Loading and Splitting ==========")
     # load_and_split()
     print("\n========== Imputation and Normalisation ==========")
     # try_imputation_and_normalisation()
     print("\n========== Classifier Exploration ==========")
-    try_classifier_exploration()
+    # try_classifier_exploration()
+    print("\n========== Feature Selection ==========")
+    try_feature_selection()
 
 if __name__ == "__main__":
     main()
