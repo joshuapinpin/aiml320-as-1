@@ -3,3 +3,4 @@ plans
 part1/*.txt
 part2/*.txt
 __pycache__/
+part2/results
