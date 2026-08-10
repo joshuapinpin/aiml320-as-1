@@ -328,13 +328,13 @@ class ClassificationPipeline:
         return results
 
     # ========================================
-    # --- Saving Results to CSV  ---
+    # --- 5. Saving Results to CSV  ---
     # ========================================
 
     def save_imputation_results_csv(
             self,
             results: dict[str, float],
-            path: Path=Path("imputation_results.csv")
+            path: Path=Path("../plans/part2/old_results/imputation_results.csv")
     ):
         """
         results: {"mean": acc, "median": acc}
@@ -349,7 +349,7 @@ class ClassificationPipeline:
     def save_normalisation_results_csv(
             self,
             results: dict[str, dict[str, float]],
-            path: Path=Path("normalisation_results.csv")
+            path: Path=Path("../plans/part2/old_results/normalisation_results.csv")
     ):
         """
         results: {condition: {"KNN": acc, "DecisionTree": acc}}
@@ -368,7 +368,7 @@ class ClassificationPipeline:
     def save_classifier_results_csv(
             self,
             results: list[ClassifierResult],
-            path: Path = Path("classifier_results.csv")
+            path: Path = Path("../plans/part2/old_results/classifier_results.csv")
     ):
         df = pd.DataFrame([
             {
@@ -389,7 +389,7 @@ class ClassificationPipeline:
             self,
             correlations: pd.Series,
             selected_features: list[str],
-            path: Path = Path("correlation_results.csv")
+            path: Path = Path("../plans/part2/old_results/correlation_results.csv")
     ):
         df = pd.DataFrame({
             "Feature": correlations.index,
@@ -403,7 +403,7 @@ class ClassificationPipeline:
     def save_feature_selection_results_csv(
             self,
             results: dict[str, float],
-            path: Path = Path("feature_selection_results.csv")
+            path: Path = Path("../plans/part2/old_results/feature_selection_results.csv")
     ):
         df = pd.DataFrame([
             {"Feature Set": name, "Accuracy (%)": acc * 100}
@@ -416,7 +416,7 @@ class ClassificationPipeline:
             self,
             results: dict[str, float],
             pca: PCA,
-            path: Path = Path("pca_results.csv")
+            path: Path = Path("../plans/part2/old_results/pca_results.csv")
     ):
         df = pd.DataFrame([
             {"Condition": name, "Accuracy (%)": acc * 100,
@@ -433,98 +433,89 @@ class ClassificationPipeline:
             for row in reader:
                 print(" | ".join(row))
 
+    # ========================================
+    # --- 6. Running Pipeline  ---
+    # ========================================
+
+    def do_load_and_split(self):
+        print("\n========== Loading and Splitting ==========")
+        
+        X, y = self.load_dataset(Path("breast-cancer.csv"))
+        print("Missing values per column:")
+        print(X.isna().sum())
+
+        split = self.split_data(X, y)
+        print(f"Train size: {split.X_train.shape}, Test size: {split.X_test.shape}")
+
+    def do_imputation_and_normalisation(self):
+        print("\n========== Imputation and Normalisation ==========")
+        X, y = self.load_dataset(Path("breast-cancer.csv"))
+        split = self.split_data(X, y)
+
+        imputation_results = self.evaluate_imputation_strategies(split, max_depth=5)
+
+        # Carry forward one strategy as "the complete dataset" for the rest of Part 2
+        full_split = self.impute_data(split, strategy="median")
+
+        normalisation_results = self.evaluate_normalisation_impact(full_split)
+
+        self.save_imputation_results_csv(imputation_results)
+        self.save_normalisation_results_csv(normalisation_results)
+
+    def do_classifier_exploration(self):
+        print("\n========== Classifier Exploration ==========")
+        X, y = self.load_dataset(Path("breast-cancer.csv"))
+        split = self.split_data(X, y)
+        full_split = self.impute_data(split, strategy="median")  # same "complete dataset" as before
+
+        results = self.evaluate_classifiers(full_split)
+        self.save_classifier_results_csv(results)
+
+        df = pd.read_csv(Path("../plans/part2/old_results/classifier_results.csv"))
+        print(df.to_string(index=False))
+
+    def do_feature_selection(self):
+        print("\n========== Feature Selection ==========")
+        X, y = self.load_dataset(Path("breast-cancer.csv"))
+        split = self.split_data(X, y)
+        full_split = self.impute_data(split, strategy="median")  # same "complete dataset" as before
+
+        correlations = self.compute_pearson_correlations(full_split)
+        selected_features = self.select_features_by_correlation(correlations, threshold=0.6)
+
+        print(f"\n{len(selected_features)} of {len(correlations)} features retained "
+              f"(|r| > 0.6):")
+        print(selected_features)
+
+        results = self.evaluate_feature_selection(full_split, selected_features, max_depth=5)
+
+        self.save_correlation_results_csv(correlations, selected_features)
+        self.save_feature_selection_results_csv(results)
+
+    def do_pca_feature_extraction(self):
+        print("\n========== Feature Extraction ==========")
+        X, y = self.load_dataset(Path("breast-cancer.csv"))
+        split = self.split_data(X, y)
+        full_split = self.impute_data(split, strategy="median")  # same "complete dataset" as before
+
+        results = self.evaluate_pca_impact(full_split, n_components=0.95, max_depth=3)
+
+        _, pca = self.apply_pca(full_split, n_components=0.95)
+        self.save_pca_results_csv(results, pca)
+    
+    def run_pipeline(self):
+        self.do_load_and_split()
+        self.do_imputation_and_normalisation()
+        self.do_classifier_exploration()
+        self.do_feature_selection()
+        self.do_pca_feature_extraction()
+
 # ================================================================================================================
 # ================================================================================================================
-
-def try_load_and_split():
-    print("\n========== Loading and Splitting ==========")
-    pl = ClassificationPipeline()
-    X, y = pl.load_dataset(Path("breast-cancer.csv"))
-    print("Missing values per column:")
-    print(X.isna().sum())
-
-    split = pl.split_data(X, y)
-    print(f"Train size: {split.X_train.shape}, Test size: {split.X_test.shape}")
-
-def try_imputation_and_normalisation():
-    print("\n========== Imputation and Normalisation ==========")
-    pl = ClassificationPipeline()
-    X, y = pl.load_dataset(Path("breast-cancer.csv"))
-    split = pl.split_data(X, y)
-
-    imputation_results = pl.evaluate_imputation_strategies(split, max_depth=5)
-
-    # Carry forward one strategy as "the complete dataset" for the rest of Part 2
-    full_split = pl.impute_data(split, strategy="median")
-
-    # # This is to double-check that the scaling worked as standardised values are genuinely transformed
-    # std_split = scale_data(full_split, StandardScaler())
-    # print(full_split.X_train.iloc[0, :5].values)  # raw
-    # print(std_split.X_train.iloc[0, :5].values)  # should look nothing like the raw values
-    #
-    # # This is to check that the predictions are not identical between the raw and standardised data
-    # knn_raw = KNeighborsClassifier(n_neighbors=9).fit(full_split.X_train, full_split.y_train)
-    # knn_std = KNeighborsClassifier(n_neighbors=9).fit(std_split.X_train, std_split.y_train)
-    # preds_raw = knn_raw.predict(full_split.X_test)
-    # preds_std = knn_std.predict(std_split.X_test)
-    # print((preds_raw == preds_std).all())  # True = literally identical predictions
-    # print((preds_raw != preds_std).sum(), "differing predictions out of", len(preds_raw))
-
-    normalisation_results = pl.evaluate_normalisation_impact(full_split)
-
-    pl.save_imputation_results_csv(imputation_results)
-    pl.save_normalisation_results_csv(normalisation_results)
-
-def try_classifier_exploration():
-    print("\n========== Classifier Exploration ==========")
-    pl = ClassificationPipeline()
-    X, y = pl.load_dataset(Path("breast-cancer.csv"))
-    split = pl.split_data(X, y)
-    full_split = pl.impute_data(split, strategy="median")  # same "complete dataset" as before
-
-    results = pl.evaluate_classifiers(full_split)
-    pl.save_classifier_results_csv(results)
-
-    df = pd.read_csv(Path("classifier_results.csv"))
-    print(df.to_string(index = False))
-
-def try_feature_selection():
-    print("\n========== Feature Selection ==========")
-    pl = ClassificationPipeline()
-    X, y = pl.load_dataset(Path("breast-cancer.csv"))
-    split = pl.split_data(X, y)
-    full_split = pl.impute_data(split, strategy="median")  # same "complete dataset" as before
-
-    correlations = pl.compute_pearson_correlations(full_split)
-    selected_features = pl.select_features_by_correlation(correlations, threshold=0.6)
-
-    print(f"\n{len(selected_features)} of {len(correlations)} features retained "
-          f"(|r| > 0.6):")
-    print(selected_features)
-
-    results = pl.evaluate_feature_selection(full_split, selected_features, max_depth=5)
-
-    pl.save_correlation_results_csv(correlations, selected_features)
-    pl.save_feature_selection_results_csv(results)
-
-def try_pca_feature_extraction():
-    print("\n========== Feature Extraction ==========")
-    pl = ClassificationPipeline()
-    X, y = pl.load_dataset(Path("breast-cancer.csv"))
-    split = pl.split_data(X, y)
-    full_split = pl.impute_data(split, strategy="median")  # same "complete dataset" as before
-
-    results = pl.evaluate_pca_impact(full_split, n_components=0.95, max_depth=3)
-
-    _, pca = pl.apply_pca(full_split, n_components=0.95)
-    pl.save_pca_results_csv(results, pca)
 
 def main():
-    try_load_and_split()
-    try_imputation_and_normalisation()
-    try_classifier_exploration()
-    try_feature_selection()
-    try_pca_feature_extraction()
+    self = ClassificationPipeline()
+    self.run_pipeline()
 
 if __name__ == "__main__":
     main()
