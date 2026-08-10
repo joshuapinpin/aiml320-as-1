@@ -1,14 +1,14 @@
 import numpy as np
 import sys
 
-from part1.Node import Node
+from Node import Node
 
 class DecisionTree:
     """
     A decision tree classifier for binary classification problems.
     """
 
-    def __init__(self, min_samples=2, max_depth=2, ig_threshold=0.00001):
+    def __init__(self, min_samples=2, max_depth=100, ig_threshold=0.00001):
         """
         Constructor for DecisionTree class.
 
@@ -269,7 +269,6 @@ class DecisionTree:
         Returns:
         list: A list of predicted class labels.
         """
-        # TODO
         predictions = [self._predict_one(x, self.root) for x in X]
         return predictions
 
@@ -309,7 +308,7 @@ class DecisionTree:
 # ================================================================================================================
 # ================================================================================================================
 
-def check_tree_printing():
+def main():
     if len(sys.argv) != 3:
         print("Usage: DecisionTree.py <train_csv> <output_tree_txt>")
         sys.exit(1)
@@ -319,7 +318,7 @@ def check_tree_printing():
     data = np.genfromtxt(train_path, delimiter=",", skip_header=1, dtype=int)
     X, y = data[:, :-1], data[:, -1]
 
-    dt = DecisionTree(min_samples=2, max_depth=2, ig_threshold=0.00001)
+    dt = DecisionTree()
     dt.fit(X, y)
 
     predictions = np.array(dt.predict(X))
@@ -328,9 +327,6 @@ def check_tree_printing():
 
     dt.save_tree(output_path)
     print(f"Tree written to {output_path}")
-
-def main():
-    check_tree_printing()
 
 if __name__ == "__main__":
     main()

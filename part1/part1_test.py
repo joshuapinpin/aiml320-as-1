@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 
-from part1.DecisionTree import DecisionTree
+from DecisionTree import DecisionTree
 
 
 class TestDecisionTree(unittest.TestCase):
