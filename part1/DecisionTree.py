@@ -1,5 +1,6 @@
 import numpy as np
 import sys
+import csv
 
 from Node import Node
 
@@ -327,6 +328,14 @@ def main():
 
     dt.save_tree(output_path)
     print(f"Tree written to {output_path}")
+
+    # --- Per-instance results CSV (for report appendix) ---
+    instance_results_path = output_path.replace(".txt", "_instance_results.csv")
+    with open(instance_results_path, "w") as f:
+        f.write("instance_id,actual_class,predicted_class,correct\n")
+        for i, (actual, predicted) in enumerate(zip(y, predictions)):
+            f.write(f"{i},{actual},{predicted},{actual == predicted}\n")
+    print(f"Per-instance results written to {instance_results_path}")
 
 if __name__ == "__main__":
     main()
