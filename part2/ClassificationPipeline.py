@@ -34,10 +34,6 @@ class ClassificationScore:
     recall: float
     f1: float
 
-# Fields
-RANDOM_STATE = 42
-TEST_SIZE = 0.30
-
 class ClassificationPipeline:
     def __init__(self, random_state=42, test_size=0.30):
         self.random_state = random_state
@@ -71,8 +67,8 @@ class ClassificationPipeline:
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
-            test_size=TEST_SIZE,
-            random_state=RANDOM_STATE
+            test_size=self.test_size,
+            random_state=self.random_state
         )
         return SplitData(X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test)
 
@@ -99,7 +95,7 @@ class ClassificationPipeline:
         results = {}
         for strategy in ["mean", "median"]:
             imputed_split = self.impute_data(split, strategy)
-            classifier = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+            classifier = DecisionTreeClassifier(max_depth=max_depth, random_state=self.random_state)
             classifier.fit(imputed_split.X_train, imputed_split.y_train)
             predictions = classifier.predict(imputed_split.X_test)
 
@@ -156,7 +152,7 @@ class ClassificationPipeline:
             knn.fit(cond_split.X_train, cond_split.y_train)
             knn_accuracy = accuracy_score(cond_split.y_test, knn.predict(cond_split.X_test))
 
-            dt = DecisionTreeClassifier(max_depth=dt_max_depth, random_state=RANDOM_STATE)
+            dt = DecisionTreeClassifier(max_depth=dt_max_depth, random_state=self.random_state)
             dt.fit(cond_split.X_train, cond_split.y_train)
             dt_accuracy = accuracy_score(cond_split.y_test, dt.predict(cond_split.X_test))
 
@@ -191,19 +187,19 @@ class ClassificationPipeline:
 
         # For Decision Tree
         for depth in [2, 8, 14]:
-            classifier = DecisionTreeClassifier(max_depth=depth, random_state=RANDOM_STATE)
+            classifier = DecisionTreeClassifier(max_depth=depth, random_state=self.random_state)
             score: ClassificationScore = self._score_model(classifier, split)
             results.append(ClassifierResult("DecisionTree", "max_depth", depth, score))
 
         # For AdaBoost
         for n in [10, 20, 30]:
-            classifier = AdaBoostClassifier(n_estimators=n, random_state=RANDOM_STATE)
+            classifier = AdaBoostClassifier(n_estimators=n, random_state=self.random_state)
             score: ClassificationScore = self._score_model(classifier, split)
             results.append(ClassifierResult("AdaBoost", "n_estimators", n, score))
 
         # For Random Forest
         for n in [10, 30, 50, 60]:
-            classifier = RandomForestClassifier(n_estimators=n, random_state=RANDOM_STATE)
+            classifier = RandomForestClassifier(n_estimators=n, random_state=self.random_state)
             score: ClassificationScore = self._score_model(classifier, split)
             results.append(ClassifierResult("Random Forest", "n_estimators", n, score))
 
@@ -248,7 +244,7 @@ class ClassificationPipeline:
         results = {}
 
         # Full feature set (baseline)
-        dt_full = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+        dt_full = DecisionTreeClassifier(max_depth=max_depth, random_state=self.random_state)
         dt_full.fit(split.X_train, split.y_train)
         accuracy_full = accuracy_score(split.y_test, dt_full.predict(split.X_test))
         results["Full feature set"] = accuracy_full
@@ -259,7 +255,7 @@ class ClassificationPipeline:
         X_train_sel = split.X_train[selected_features]
         X_test_sel = split.X_test[selected_features]
 
-        dt_sel = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+        dt_sel = DecisionTreeClassifier(max_depth=max_depth, random_state=self.random_state)
         dt_sel.fit(X_train_sel, split.y_train)
         accuracy_sel = accuracy_score(split.y_test, dt_sel.predict(X_test_sel))
         results["Selected feature set"] = accuracy_sel
@@ -283,7 +279,7 @@ class ClassificationPipeline:
 
         scaled_split = self.scale_data(split, StandardScaler())
 
-        pca = PCA(n_components=n_components, random_state=RANDOM_STATE)
+        pca = PCA(n_components=n_components, random_state=self.random_state)
 
         X_train_pca = pd.DataFrame(
             pca.fit_transform(scaled_split.X_train),
@@ -313,7 +309,7 @@ class ClassificationPipeline:
 
         # Baseline: standardised, no PCA
         scaled_split = self.scale_data(split, StandardScaler())
-        dt_no_pca = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+        dt_no_pca = DecisionTreeClassifier(max_depth=max_depth, random_state=self.random_state)
         dt_no_pca.fit(scaled_split.X_train, scaled_split.y_train)
         accuracy_no_pca = accuracy_score(scaled_split.y_test, dt_no_pca.predict(scaled_split.X_test))
         results["No PCA (standardised"] = accuracy_no_pca
@@ -322,7 +318,7 @@ class ClassificationPipeline:
 
         # With PCA
         pca_split, pca = self.apply_pca(split, n_components)
-        dt_pca = DecisionTreeClassifier(max_depth=max_depth, random_state=RANDOM_STATE)
+        dt_pca = DecisionTreeClassifier(max_depth=max_depth, random_state=self.random_state)
         dt_pca.fit(pca_split.X_train, pca_split.y_train)
         accuracy_pca = accuracy_score(pca_split.y_test, dt_pca.predict(pca_split.X_test))
         results["With PCA"] = accuracy_pca
