@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import csv
+
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -25,14 +27,11 @@ class ClassifierResult:
     classifier: str
     hyperparameter: str
     value: int
-    score: ClassificationScore
-
-@dataclass(frozen=True)
-class ClassificationScore:
-    accuracy: float   # 0-100
+    accuracy: float  # 0-100
     precision: float
     recall: float
     f1: float
+
 
 class ClassificationPipeline:
     def __init__(self, random_state=42, test_size=0.30):
@@ -165,7 +164,7 @@ class ClassificationPipeline:
     # --- 3. Classifier Exploration & Hyperparameter Tuning ---
     # ========================================
 
-    def _score_model(self, classifier, split: SplitData) -> ClassificationScore:
+    def _score_model(self, classifier, split: SplitData) -> tuple[float, float, float, float]:
         classifier.fit(split.X_train, split.y_train)
         predictions = classifier.predict(split.X_test)
 
@@ -174,7 +173,7 @@ class ClassificationPipeline:
         recall = recall_score(split.y_test, predictions, pos_label=1)
         f1 = f1_score(split.y_test, predictions, pos_label=1)
 
-        return ClassificationScore(accuracy, precision, recall, f1)
+        return accuracy, precision, recall, f1
 
     def evaluate_classifiers(self, split: SplitData) -> list[ClassifierResult]:
         results: list[ClassifierResult] = []
@@ -182,26 +181,26 @@ class ClassificationPipeline:
         # For KNN
         for k in [3, 9, 15, 21]:
             classifier = KNeighborsClassifier(n_neighbors=k)
-            score: ClassificationScore = self._score_model(classifier, split)
-            results.append(ClassifierResult("KNN", "n_neighbours", k, score))
+            accuracy, precision, recall, f1 = self._score_model(classifier, split)
+            results.append(ClassifierResult("KNN", "n_neighbours", k, accuracy, precision, recall, f1))
 
         # For Decision Tree
         for depth in [2, 8, 14]:
             classifier = DecisionTreeClassifier(max_depth=depth, random_state=self.random_state)
-            score: ClassificationScore = self._score_model(classifier, split)
-            results.append(ClassifierResult("DecisionTree", "max_depth", depth, score))
+            accuracy, precision, recall, f1 = self._score_model(classifier, split)
+            results.append(ClassifierResult("DecisionTree", "max_depth", depth, accuracy, precision, recall, f1))
 
         # For AdaBoost
         for n in [10, 20, 30]:
             classifier = AdaBoostClassifier(n_estimators=n, random_state=self.random_state)
-            score: ClassificationScore = self._score_model(classifier, split)
-            results.append(ClassifierResult("AdaBoost", "n_estimators", n, score))
+            accuracy, precision, recall, f1 = self._score_model(classifier, split)
+            results.append(ClassifierResult("AdaBoost", "n_estimators", n, accuracy, precision, recall, f1))
 
         # For Random Forest
         for n in [10, 30, 50, 60]:
             classifier = RandomForestClassifier(n_estimators=n, random_state=self.random_state)
-            score: ClassificationScore = self._score_model(classifier, split)
-            results.append(ClassifierResult("Random Forest", "n_estimators", n, score))
+            accuracy, precision, recall, f1 = self._score_model(classifier, split)
+            results.append(ClassifierResult("Random Forest", "n_estimators", n, accuracy, precision, recall, f1))
 
         return results
 
@@ -312,7 +311,7 @@ class ClassificationPipeline:
         dt_no_pca = DecisionTreeClassifier(max_depth=max_depth, random_state=self.random_state)
         dt_no_pca.fit(scaled_split.X_train, scaled_split.y_train)
         accuracy_no_pca = accuracy_score(scaled_split.y_test, dt_no_pca.predict(scaled_split.X_test))
-        results["No PCA (standardised"] = accuracy_no_pca
+        results["No PCA (standardised)"] = accuracy_no_pca
         print(f"No PCA, {scaled_split.X_train.shape[1]} features -> "
               f"Decision Tree (max_depth={max_depth}) accuracy: {accuracy_no_pca * 100:.2f}%")
 
@@ -376,10 +375,10 @@ class ClassificationPipeline:
                 "Classifier": r.classifier,
                 "Hyperparameter": r.hyperparameter,
                 "Value": r.value,
-                "Accuracy (%)": round(r.score.accuracy, 2),
-                "Precision": round(r.score.precision, 4),
-                "Recall": round(r.score.recall, 4),
-                "F1 Score": round(r.score.f1, 4),
+                "Accuracy (%)": round(r.accuracy, 2),
+                "Precision": round(r.precision, 4),
+                "Recall": round(r.recall, 4),
+                "F1 Score": round(r.f1, 4),
             }
             for r in results
         ])
@@ -427,93 +426,105 @@ class ClassificationPipeline:
         df.to_csv(path, index=False)
         print(f"Saved PCA results to {path}")
 
+    def print_csv(path: Path) -> None:
+        with path.open(newline="", encoding="utf-8") as file:
+            reader = csv.reader(file)
+
+            for row in reader:
+                print(" | ".join(row))
+
 # ================================================================================================================
 # ================================================================================================================
-#
-# def try_load_and_split():
-#     X, y = load_dataset(Path("breast-cancer.csv"))
-#     print("Missing values per column:")
-#     print(X.isna().sum())
-#
-#     split = split_data(X, y)
-#     print(f"Train size: {split.X_train.shape}, Test size: {split.X_test.shape}")
-#
-# def try_imputation_and_normalisation():
-#     X, y = load_dataset(Path("breast-cancer.csv"))
-#     split = split_data(X, y)
-#
-#     imputation_results = evaluate_imputation_strategies(split, max_depth=5)
-#
-#     # Carry forward one strategy as "the complete dataset" for the rest of Part 2
-#     full_split = impute_data(split, strategy="median")
-#
-#     # # This is to double-check that the scaling worked as standardised values are genuinely transformed
-#     # std_split = scale_data(full_split, StandardScaler())
-#     # print(full_split.X_train.iloc[0, :5].values)  # raw
-#     # print(std_split.X_train.iloc[0, :5].values)  # should look nothing like the raw values
-#     #
-#     # # This is to check that the predictions are not identical between the raw and standardised data
-#     # knn_raw = KNeighborsClassifier(n_neighbors=9).fit(full_split.X_train, full_split.y_train)
-#     # knn_std = KNeighborsClassifier(n_neighbors=9).fit(std_split.X_train, std_split.y_train)
-#     # preds_raw = knn_raw.predict(full_split.X_test)
-#     # preds_std = knn_std.predict(std_split.X_test)
-#     # print((preds_raw == preds_std).all())  # True = literally identical predictions
-#     # print((preds_raw != preds_std).sum(), "differing predictions out of", len(preds_raw))
-#
-#     normalisation_results = evaluate_normalisation_impact(full_split)
-#
-#     save_imputation_results_csv(imputation_results)
-#     save_normalisation_results_csv(normalisation_results)
-#
-# def try_classifier_exploration():
-#     X, y = load_dataset(Path("breast-cancer.csv"))
-#     split = split_data(X, y)
-#     full_split = impute_data(split, strategy="median")  # same "complete dataset" as before
-#
-#     results = evaluate_classifiers(full_split)
-#     save_classifier_results_csv(results)
-#
-#     df = pd.read_csv(Path("classifier_results.csv"))
-#     print(df.to_string(index = False))
-#
-# def try_feature_selection():
-#     X, y = load_dataset(Path("breast-cancer.csv"))
-#     split = split_data(X, y)
-#     full_split = impute_data(split, strategy="median")  # same "complete dataset" as before
-#
-#     correlations = compute_pearson_correlations(full_split)
-#     selected_features = select_features_by_correlation(correlations, threshold=0.6)
-#
-#     print(f"\n{len(selected_features)} of {len(correlations)} features retained "
-#           f"(|r| > 0.6):")
-#     print(selected_features)
-#
-#     results = evaluate_feature_selection(full_split, selected_features, max_depth=5)
-#
-#     save_correlation_results_csv(correlations, selected_features)
-#     save_feature_selection_results_csv(results)
-#
-# def try_pca_feature_extraction():
-#     X, y = load_dataset(Path("breast-cancer.csv"))
-#     split = split_data(X, y)
-#     full_split = impute_data(split, strategy="median")  # same "complete dataset" as before
-#
-#     results = evaluate_pca_impact(full_split, n_components=0.95, max_depth=3)
-#
-#     _, pca = apply_pca(full_split, n_components=0.95)
-#     save_pca_results_csv(results, pca)
+
+def try_load_and_split():
+    print("\n========== Loading and Splitting ==========")
+    pl = ClassificationPipeline()
+    X, y = pl.load_dataset(Path("breast-cancer.csv"))
+    print("Missing values per column:")
+    print(X.isna().sum())
+
+    split = pl.split_data(X, y)
+    print(f"Train size: {split.X_train.shape}, Test size: {split.X_test.shape}")
+
+def try_imputation_and_normalisation():
+    print("\n========== Imputation and Normalisation ==========")
+    pl = ClassificationPipeline()
+    X, y = pl.load_dataset(Path("breast-cancer.csv"))
+    split = pl.split_data(X, y)
+
+    imputation_results = pl.evaluate_imputation_strategies(split, max_depth=5)
+
+    # Carry forward one strategy as "the complete dataset" for the rest of Part 2
+    full_split = pl.impute_data(split, strategy="median")
+
+    # # This is to double-check that the scaling worked as standardised values are genuinely transformed
+    # std_split = scale_data(full_split, StandardScaler())
+    # print(full_split.X_train.iloc[0, :5].values)  # raw
+    # print(std_split.X_train.iloc[0, :5].values)  # should look nothing like the raw values
+    #
+    # # This is to check that the predictions are not identical between the raw and standardised data
+    # knn_raw = KNeighborsClassifier(n_neighbors=9).fit(full_split.X_train, full_split.y_train)
+    # knn_std = KNeighborsClassifier(n_neighbors=9).fit(std_split.X_train, std_split.y_train)
+    # preds_raw = knn_raw.predict(full_split.X_test)
+    # preds_std = knn_std.predict(std_split.X_test)
+    # print((preds_raw == preds_std).all())  # True = literally identical predictions
+    # print((preds_raw != preds_std).sum(), "differing predictions out of", len(preds_raw))
+
+    normalisation_results = pl.evaluate_normalisation_impact(full_split)
+
+    pl.save_imputation_results_csv(imputation_results)
+    pl.save_normalisation_results_csv(normalisation_results)
+
+def try_classifier_exploration():
+    print("\n========== Classifier Exploration ==========")
+    pl = ClassificationPipeline()
+    X, y = pl.load_dataset(Path("breast-cancer.csv"))
+    split = pl.split_data(X, y)
+    full_split = pl.impute_data(split, strategy="median")  # same "complete dataset" as before
+
+    results = pl.evaluate_classifiers(full_split)
+    pl.save_classifier_results_csv(results)
+
+    df = pd.read_csv(Path("classifier_results.csv"))
+    print(df.to_string(index = False))
+
+def try_feature_selection():
+    print("\n========== Feature Selection ==========")
+    pl = ClassificationPipeline()
+    X, y = pl.load_dataset(Path("breast-cancer.csv"))
+    split = pl.split_data(X, y)
+    full_split = pl.impute_data(split, strategy="median")  # same "complete dataset" as before
+
+    correlations = pl.compute_pearson_correlations(full_split)
+    selected_features = pl.select_features_by_correlation(correlations, threshold=0.6)
+
+    print(f"\n{len(selected_features)} of {len(correlations)} features retained "
+          f"(|r| > 0.6):")
+    print(selected_features)
+
+    results = pl.evaluate_feature_selection(full_split, selected_features, max_depth=5)
+
+    pl.save_correlation_results_csv(correlations, selected_features)
+    pl.save_feature_selection_results_csv(results)
+
+def try_pca_feature_extraction():
+    print("\n========== Feature Extraction ==========")
+    pl = ClassificationPipeline()
+    X, y = pl.load_dataset(Path("breast-cancer.csv"))
+    split = pl.split_data(X, y)
+    full_split = pl.impute_data(split, strategy="median")  # same "complete dataset" as before
+
+    results = pl.evaluate_pca_impact(full_split, n_components=0.95, max_depth=3)
+
+    _, pca = pl.apply_pca(full_split, n_components=0.95)
+    pl.save_pca_results_csv(results, pca)
 
 def main():
-    print("\n========== Loading and Splitting ==========")
-    # load_and_split()
-    print("\n========== Imputation and Normalisation ==========")
-    # try_imputation_and_normalisation()
-    print("\n========== Classifier Exploration ==========")
-    # try_classifier_exploration()
-    print("\n========== Feature Selection ==========")
-    # try_feature_selection()
-    print("\n========== Feature Extraction ==========")
-    # try_pca_feature_extraction()
+    try_load_and_split()
+    try_imputation_and_normalisation()
+    try_classifier_exploration()
+    try_feature_selection()
+    try_pca_feature_extraction()
 
 if __name__ == "__main__":
     main()
